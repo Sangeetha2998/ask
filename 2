@@ -1,0 +1,108 @@
+import os
+import requests
+import streamlit as st
+from dotenv import load_dotenv
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_community.llms import HuggingFaceEndpoint
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Get the API token from environment variable
+api_token = os.getenv("HUGGINGFACEHUB_API_TOKEN")
+
+# Define the repository ID and task
+repo_id = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+task = "text-generation"
+
+# App config
+st.set_page_config(page_title="Ask Emily", page_icon="🌍")
+st.title("Ask Emily: Your AI Travel Companion ✈️")
+
+# Define the template for the AI's responses
+template = """
+You are an AI-powered trip planner and travel advisor named Emily. You help users plan their trips, find RV technicians, provide GPS routing, and give fuel station alerts. Here are some scenarios...
+1. Suggest a trip itinerary based on user preferences.
+2. Recommend campgrounds or RV parks.
+3. Provide GPS directions using Google Maps and Waze.
+4. Help find RV technicians based on user location.
+5. Alert users about nearby fuel stations and their prices.
+6. Offer personalized recommendations based on user demographics.
+...
+Chat history:
+{chat_history}
+User question:
+{user_question}
+"""
+
+prompt = ChatPromptTemplate.from_template(template)
+
+# Initialize Hugging Face Endpoint once
+llm = HuggingFaceEndpoint(
+    huggingfacehub_api_token=api_token,
+    repo_id=repo_id,
+    task=task
+)
+
+# Function to get a response from the model
+def get_response(user_query, chat_history):
+    chain = prompt | llm | StrOutputParser()
+    try:
+        response = chain.invoke({
+            "chat_history": chat_history,
+            "user_question": user_query,
+        })
+        return response.replace("AI response:", "").strip()
+    except Exception as e:
+        st.error("Error getting response. Please try again.")
+        return "Sorry, I'm having technical issues."
+
+# Initialize session state
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = [
+        AIMessage(content="Hello, I am Emily, your AI travel companion. How can I assist you today?"),
+    ]
+
+# Display chat history
+for message in st.session_state.chat_history:
+    if isinstance(message, AIMessage):
+        with st.chat_message("AI"):
+            st.write(message.content)
+    elif isinstance(message, HumanMessage):
+        with st.chat_message("Human"):
+            st.write(message.content)
+
+# User input
+user_query = st.chat_input("Type your message here...")
+if user_query:
+    st.session_state.chat_history.append(HumanMessage(content=user_query))
+    with st.chat_message("Human"):
+        st.write(user_query)
+
+    # Get the response from the AI model
+    response = get_response(user_query, st.session_state.chat_history)
+    with st.chat_message("AI"):
+        st.write(response)
+
+    st.session_state.chat_history.append(AIMessage(content=response))
+
+# Function to find fuel stations and prices
+def find_fuel_stations(location):
+    # Example API call (replace with actual API)
+    # response = requests.get(f"https://api.example.com/fuel?location={location}")
+    # return response.json()  # Adjust based on actual API response structure
+    return [{"name": "Fuel Station 1", "price": 3.45}, {"name": "Fuel Station 2", "price": 3.55}]  # Mock data
+
+# Function to provide personalized recommendations
+def get_personalized_recommendations(group_type):
+    recommendations = {
+        "elderly": ["Visit the local museum", "Take a scenic drive"],
+        "family": ["Go to the amusement park", "Visit the zoo"],
+        "friends": ["Try out local restaurants", "Go hiking"],
+        "single": ["Explore nightlife", "Join a local tour"]
+    }
+    return recommendations.get(group_type, [])
+
+# Additional User Input for Demographics
